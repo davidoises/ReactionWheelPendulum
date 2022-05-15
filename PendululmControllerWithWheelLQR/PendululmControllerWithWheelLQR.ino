@@ -58,7 +58,7 @@ void setup() {
 
   delay(4000);
 
-  // Set sampling triffer to ANGLE_SAMPLING_TIME_US microseconds
+  // Set sampling trigger to ANGLE_SAMPLING_TIME_US microseconds
   update_sampling = 0;
   sampling_timer = timerBegin(0, 80, true);
   timerAttachInterrupt(sampling_timer, &sampling_isr, true);
@@ -144,6 +144,7 @@ void loop() {
     //Serial.print(lpf_angle);
     //Serial.print(sp);
     //Serial.print(" ");
+    Serial.print("180 -180 ");
     Serial.println(lpf_angle);
     //Serial.print(w);
     //Serial.print(" ");
