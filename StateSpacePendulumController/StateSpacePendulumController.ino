@@ -1,15 +1,46 @@
+/*
+ * @file StateSpacePendulumController
+ * 
+ * Zero regulation, state space controller of the angular position of reaction wheel pendulum.
+ * Intended to regulate the pendulum angular positino to 0 degrees, but an utomatic setpoint
+ * layer allows stability in the presence of mechanical unbalance in the pendulum.
+ *
+ * @author [davidoises]
+ * @version  V2.0
+ * @date  2022-June-10
+ * @https://github.com/davidoises/ReactionWheelPendulum
+ */
+ 
+/****************************************************************************************
+ *                                       I N C L U D E S
+ ****************************************************************************************/
+ 
 #include <SPI.h>
+
+/****************************************************************************************
+ *                                       D E F I N E S
+ ****************************************************************************************/
+
+// Note on UARTs:
+//     3 UARTs can be mapped to any pin through internal mux.
+//     These UARTs are tied to specific pins by default and using these pins can
+//     provide some optimization (maybe not with ardunio Serial library). Default pins:
+//     UART0 RX:3 TX:1
+//     UART1 RX:9 TX:10
+//     UART2 RX16 TX:17
 
 #define RXD1 9
 #define TXD1 10
 
-#define ANGLE_CONVERTION 360.0/65536.0
+#define ANGLE_CONVERTION 360.0f/65536.0f
 #define INITIAL_ANGLE 77.45
 #define ANGLE_SAMPLING_TIME_US 10000
 //#define ANGLE_SAMPLING_TIME_US 25000
 //#define ANGLE_SAMPLING_TIME_US 5000
 
+
 uint16_t readAngleRaw16();
+float getAngularSpeed(float angle);
 
 SPISettings s = SPISettings(8000000, MSBFIRST, SPI_MODE0);
 SPIClass* vspi = new SPIClass(VSPI);
