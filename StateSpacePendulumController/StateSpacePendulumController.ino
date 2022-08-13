@@ -85,8 +85,7 @@ void setup()
   vspi->begin();
   pinMode(SS, OUTPUT);
 
-  // Initializes a secondary serial port to send commands to motor controller.
-  // Sends the initial commands to start motor operation.
+  // Initializes motor controller
   motor_controller_handler_init();
 
   delay(4000);
@@ -194,10 +193,7 @@ void loop() {
     
     /* End control law conditioning*/
 
-    /* Start of motor command transmission*/
     motor_controller_handler_set_current(control_law);
-
-    /* Ending of motor command transmission*/
     
     update_sampling = 0;
   }

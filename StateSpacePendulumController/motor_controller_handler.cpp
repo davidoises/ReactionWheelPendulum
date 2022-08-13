@@ -21,10 +21,12 @@
 
 #define MOTOR_SPEED_BUFFER_LENGTH (4U)
 
+// Conversion factor for motor speed to bits
 #define SPEED_FULL_SCALE_RPM (5461.0f)
 #define SPEED_DATA_LENGTH_BITS (14)
 #define SPEED_RESOLUTION_RPM_PER_BIT ( SPEED_FULL_SCALE_RPM/((float)(2<<(SPEED_DATA_LENGTH_BITS-1)) ) )
 
+// Conversion factor for current command to bits
 #define CURRENT_FULL_SCALE_mA (5000.0f)
 #define CURRENT_DATA_LENGTH_BITS (14)
 #define CURRENT_RESOLUTION_mA_PER_BIT ( CURRENT_FULL_SCALE_mA/( (float)(2<<(CURRENT_DATA_LENGTH_BITS-1)) ) )
@@ -59,6 +61,7 @@ void motor_controller_handler_set_current(float current_command)
   uint8_t current_command_MSB = ( (current_command_bits >> 7) & 0x00FF) | 0x80;
   uint8_t current_command_LSB = (current_command_bits & 0x00FF) | 0x80;
 
+  // Send the command over UART with the required structure
   Serial2.print(":");
   Serial2.print("c");
   if(current_command >= 0)
