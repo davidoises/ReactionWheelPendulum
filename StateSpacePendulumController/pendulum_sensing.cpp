@@ -92,27 +92,35 @@ float pendulum_sensing_get_adjusted_angle()
 }
 
 
-float pendulum_sensing_get_angular_speed(float angle)
+float pendulum_sensing_get_angular_speed(const float angle, const float time_step)
 {
-  // Elapsed time calculation can be left out since timer is precisely sampling every 10ms
-  static uint32_t previousT;
-  uint32_t currentT = micros();
-  float dt = (currentT - previousT);
-  previousT = currentT;
+  static float previousAngle = 0;
   
-  float originalAngle = angle;
-  static float previousAngle;
+  // Since the pendulum measures 180 deg when hanging free, there is a chance of
+  // agressive jumps between 180 and -180 degs. The following logig helps with the
+  // derivative around this point. Updated angle holds a temporal angle based on this.
+  float updated_angle = angle;
+  
+  // Check if there was a change of sign around 180 degs
   if ( abs(angle) > 150 && angle*previousAngle < 0 )
   {
-    //Serial.println("Jump");
-    angle = 360.0 - abs(angle);
-    if(previousAngle < 0)
+    // Update the angle to a range of 0 to 360
+    updated_angle = 360.0f - abs(angle);
+
+    // Once the updated angle is in a range that allows differentiation, apply the same
+    // sign as the previous measurement
+    if(previousAngle < 0.0f)
     {
-      angle = angle * -1;
+      updated_angle *= -1.0f;
     }
   }
-  float angleDiff = angle - previousAngle;
-  previousAngle = originalAngle;
-  
-  return angleDiff*1000000.0/dt;
+
+  // Get the difference based on the updated angle and the previous measurement
+  const float angle_difference = updated_angle - previousAngle;
+
+  // Keep track of measurement for next iteration
+  previousAngle = angle;
+
+  // Return derivative
+  return angle_difference/time_step;
 }

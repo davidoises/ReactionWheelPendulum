@@ -94,7 +94,7 @@ void loop() {
   if (update_sampling)
   {
     float angle = pendulum_sensing_get_adjusted_angle();
-    float w = pendulum_sensing_get_angular_speed(angle);
+    float w = pendulum_sensing_get_angular_speed(angle, 1000000.0f/ANGLE_SAMPLING_TIME_US);
     float motor_speed = motor_controller_handler_get_speed();
 
     lpf_angle = 0.7*lpf_angle + 0.3*angle;
