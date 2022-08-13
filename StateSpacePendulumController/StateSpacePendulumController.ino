@@ -27,18 +27,33 @@
 //#define ANGLE_SAMPLING_TIME_US 5000
 
 /****************************************************************************************
- *                              G L O B A L   V A R I A B L E S
+ *                                          T Y P E S
  ****************************************************************************************/
 
-float lpf_angle = 0;
-float hlpf_angle = 0;
-float lpf_w = 0;
-float lpf_mot = 0;
-float sp = 0;
-float lpf_sp = 0;
-float control_law = 0;
+struct pendulum_controller_state_S
+{
+  float control_law;        // Current command coming out of the controller
+  bool  at_operating_point; // Flag indicating whether the pendulum needs to be swung up to the operating region
+  float adjusted_reference; // Reference for the pendulum position, automatically set for optimum control
+};
 
-uint8_t swingged_up = 0;
+struct pendulum_sensing_vars_S
+{
+  float pendulum_angle;
+  float pendulum_speed;
+  float motor_speed;
+
+  float pendulum_angle_filtered;
+  float pendulum_speed_filtered;
+  float motor_speed_filtered;
+};
+
+/****************************************************************************************
+ *                              G L O B A L   V A R I A B L E S
+ ****************************************************************************************/
+ 
+struct pendulum_controller_state_S pendulum_controller_state = {0};
+struct pendulum_sensing_vars_S pendulum_sensing_vars = {0};
 
 // Sampling timer
 hw_timer_t * sampling_timer = NULL;
@@ -55,6 +70,11 @@ void IRAM_ATTR sampling_isr() {
 /****************************************************************************************
  *                P R I V A T E   F U N C T I O N   D E C L A R A T I O N S                  
  ****************************************************************************************/
+
+void pendulum_controller(struct pendulum_sensing_vars_S* sensing_vars, struct pendulum_controller_state_S* controller_state);
+float pendulum_reference_correction(const float pendulum_angle, const float pendulum_reference);
+float pendulum_position_control(const float pendulum_angle, const float pendulum_speed, const float motor_speed, const float pendulum_reference);
+float pendulum_swing_up(const bool at_operating_point, const float pendulum_speed);
 
 /****************************************************************************************
  *                        A R D U I N O   B A S E   F U N C T I O N S                  
@@ -93,96 +113,29 @@ void loop() {
 
   if (update_sampling)
   {
-    float angle = pendulum_sensing_get_adjusted_angle();
-    float w = pendulum_sensing_get_angular_speed(angle, 1000000.0f/ANGLE_SAMPLING_TIME_US);
-    float motor_speed = motor_controller_handler_get_speed();
+    pendulum_sensing_vars.pendulum_angle = pendulum_sensing_get_adjusted_angle();
+    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, 1000000.0f/ANGLE_SAMPLING_TIME_US);
+    pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
 
-    lpf_angle = 0.7*lpf_angle + 0.3*angle;
-    hlpf_angle = 0.9*hlpf_angle + 0.1*angle;
-    lpf_w = 0.7*lpf_w + 0.3*w;
-    lpf_mot = 0.7*lpf_mot + 0.3*motor_speed;
+    pendulum_sensing_vars.pendulum_angle_filtered = 0.7f * pendulum_sensing_vars.pendulum_angle_filtered + 0.3f * pendulum_sensing_vars.pendulum_angle;
+    pendulum_sensing_vars.pendulum_speed_filtered = 0.7f * pendulum_sensing_vars.pendulum_speed_filtered + 0.3f * pendulum_sensing_vars.pendulum_speed;
+    pendulum_sensing_vars.motor_speed_filtered = 0.7f * pendulum_sensing_vars.motor_speed_filtered + 0.3f * pendulum_sensing_vars.motor_speed;
 
-    if(abs(angle) < 27.0)
-    {
-      
-      float kp = 240.0;
-      float kd = 40.0;
-      float ks = 0.001f*6.0f; // updated since the scaling used to be wrong
-      float kt = 0.0075;
+    pendulum_controller(&pendulum_sensing_vars, &pendulum_controller_state);
 
-      if(abs(angle) < 6.0)
-      {
-        float error = lpf_angle - sp;
-        sp = sp - kt*error;
-        //lpf_sp = 0.7*lpf_sp + 0.3*sp;
-        lpf_sp = sp;
-      }
-      else
-      {
-        sp = 0;
-      }
-  
-      control_law = kp*(lpf_angle - lpf_sp) + kd*lpf_w - ks*lpf_mot;
-
-      
-      /* End of control law calculation */
-  
-      /* Start control law conditioning*/
-      control_law = constrain(control_law, -5000, 5000);
-  
-      // linerization method
-      float mapped_control = map(abs(control_law), 0, 5000, 600, 5000);
-      if(control_law < 0)
-      {
-        control_law = -1*mapped_control;
-      }
-      else
-      {
-        control_law = mapped_control;
-      }
-    }
-    else
-    {
-      if(swingged_up == 0)
-      {
-        //control_law = 0;
-        if(lpf_w < 0)
-        {
-          control_law = 3300*0.4;
-        }
-        else
-        {
-          control_law = -3300*0.4;
-        }
-      }
-      else
-      {
-        control_law = 0;
-      }
-      
-    }
+    motor_controller_handler_set_current(pendulum_controller_state.control_law);
 
     //Serial.print(lpf_angle);
     //Serial.print(sp);
     //Serial.print(" ");
     Serial.print("180 -180 ");
-    Serial.println(lpf_angle);
+    Serial.println(pendulum_sensing_vars.pendulum_angle_filtered);
     //Serial.print(w);
     //Serial.print(" ");
     //Serial.println(lpf_w);
     //Serial.println(motor_speed);
     //Serial.print(" ");
     //Serial.println(control_law);
-    
-    if(abs(angle) < 10.0)
-    {
-      swingged_up = 1;
-      //swingged_up = 0;
-    }
-    
-    /* End control law conditioning*/
-
-    motor_controller_handler_set_current(control_law);
     
     update_sampling = 0;
   }
@@ -192,3 +145,84 @@ void loop() {
 /****************************************************************************************
  *                               P R I V A T E   F U N C T I O N S                 
  ****************************************************************************************/
+
+void pendulum_controller(struct pendulum_sensing_vars_S* sensing_vars, struct pendulum_controller_state_S* controller_state)
+{
+  
+  if(abs(sensing_vars->pendulum_angle) < 27.0)
+  {
+    
+    if(abs(sensing_vars->pendulum_angle) < 6.0f)
+    {
+      controller_state->adjusted_reference = pendulum_reference_correction(sensing_vars->pendulum_angle_filtered, controller_state->adjusted_reference);
+    }
+    else
+    {
+      controller_state->adjusted_reference = 0.0f;
+    }
+    
+    controller_state->control_law = pendulum_position_control(sensing_vars->pendulum_angle_filtered, sensing_vars->pendulum_speed_filtered, sensing_vars->motor_speed_filtered, controller_state->adjusted_reference);
+  }
+  else
+  {
+    controller_state->control_law = pendulum_swing_up(controller_state->at_operating_point, sensing_vars->pendulum_speed_filtered);
+  }
+
+  if(abs(sensing_vars->pendulum_angle) < 10.0)
+  {
+    controller_state->at_operating_point = true;
+  }
+}
+
+float pendulum_reference_correction(const float pendulum_angle, const float pendulum_reference)
+{
+  float kt = 0.0075;
+
+  const float error = pendulum_angle - pendulum_reference;
+  const float new_reference = pendulum_reference - kt*error;
+
+  return new_reference;
+}
+
+float pendulum_position_control(const float pendulum_angle, const float pendulum_speed, const float motor_speed, const float pendulum_reference)
+{
+  float kp = 240.0;
+  float kd = 40.0;
+  float ks = 0.001f*6.0f; // updated since the scaling used to be wrong  
+
+  float motor_current_command = kp*(pendulum_angle - pendulum_reference) + kd*pendulum_speed - ks*motor_speed;
+
+  motor_current_command = constrain(motor_current_command, -5000, 5000);
+
+  // linerization method
+  float mapped_control = map(abs(motor_current_command), 0, 5000, 600, 5000);
+  if(motor_current_command < 0)
+  {
+    motor_current_command = -1*mapped_control;
+  }
+  else
+  {
+    motor_current_command = mapped_control;
+  }
+
+  return motor_current_command;
+}
+
+float pendulum_swing_up(const bool at_operating_point, const float pendulum_speed)
+{
+  float motor_current_command = 0;
+  
+  if(!at_operating_point)
+  {
+    if(pendulum_speed < 0.0f)
+    {
+      motor_current_command = 3300.0f*0.4f;
+    }
+    else
+    {
+      motor_current_command = -3300.0f*0.4f;
+    }
+  }
+
+  return motor_current_command;
+}
