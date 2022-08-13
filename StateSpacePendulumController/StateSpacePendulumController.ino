@@ -18,13 +18,13 @@
 #include <SPI.h>
 
 /****************************************************************************************
- *                                       D E F I N E S
+ *                                        D E F I N E S
  ****************************************************************************************/
 
 // Note on UARTs:
 //     3 UARTs can be mapped to any pin through internal mux.
 //     These UARTs are tied to specific pins by default and using these pins can
-//     provide some optimization (maybe not with ardunio Serial library). Default pins:
+//     provide some optimization (maybe not with arduino Serial library). Default pins:
 //     UART0 RX:3 TX:1
 //     UART1 RX:9 TX:10
 //     UART2 RX16 TX:17
@@ -38,19 +38,9 @@
 //#define ANGLE_SAMPLING_TIME_US 25000
 //#define ANGLE_SAMPLING_TIME_US 5000
 
-
-uint16_t readAngleRaw16();
-float getAngularSpeed(float angle);
-
-SPISettings s = SPISettings(8000000, MSBFIRST, SPI_MODE0);
-SPIClass* vspi = new SPIClass(VSPI);
-
-// Sampling timer
-hw_timer_t * sampling_timer = NULL;
-volatile uint8_t update_sampling;
-void IRAM_ATTR sampling_isr() {
-  update_sampling = 1;
-}
+/****************************************************************************************
+ *                              G L O B A L   V A R I A B L E S
+ ****************************************************************************************/
 
 float lpf_angle = 0;
 float hlpf_angle = 0;
@@ -61,6 +51,34 @@ float lpf_sp = 0;
 float control_law = 0;
 
 uint8_t swingged_up = 0;
+
+SPISettings s = SPISettings(8000000, MSBFIRST, SPI_MODE0);
+SPIClass* vspi = new SPIClass(VSPI);
+
+// Sampling timer
+hw_timer_t * sampling_timer = NULL;
+volatile uint8_t update_sampling;
+
+/****************************************************************************************
+ *                               I S R   C A L L B A C K S                      
+ ****************************************************************************************/
+
+void IRAM_ATTR sampling_isr() {
+  update_sampling = 1;
+}
+
+/****************************************************************************************
+ *                P R I V A T E   F U N C T I O N   D E C L A R A T I O N S                  
+ ****************************************************************************************/
+
+int getMotorSpeed();
+uint16_t readAngleRaw16();
+float getWrappedAngle(uint16_t rawAngle);
+float getAngularSpeed(float angle);
+
+/****************************************************************************************
+ *                        A R D U I N O   B A S E   F U N C T I O N S                  
+ ****************************************************************************************/
 
 void setup() {
 
@@ -195,6 +213,11 @@ void loop() {
     /* Start of motor command transmission*/
     
     //  range of 5000mA in 14 bits
+    // 1000/(153*2) seems to be a random number I picked to fit the max expected current in mA within 14 bits without wastin space
+    // Seems to actualy target 4200 instead of 5000mA
+    // TODO: fix this to fit the correct data
+    //       The correct factor for abs(5000) should be 1/resolution = (2^14-1)/(5000)
+    //       And the conversion should be bits = mA / resolution
     uint16_t motor_current = (abs(control_law)*1000)/(153*2);
     uint8_t MSB = ( (motor_current >> 7) & 0x00FF) | 0x80; // set MSB bit to one always, test on other microncontroller without this hack
     uint8_t LSB = (motor_current & 0x00FF) | 0x80;
@@ -220,14 +243,38 @@ void loop() {
 
 }
 
+ /****************************************************************************************
+ *                               P R I V A T E   F U N C T I O N S                 
+ ****************************************************************************************/
+
+/**
+ * @brief      Gets the motor speed from the bldc controller by sending
+ *             the UART request and then parsing the read bytes.
+ *             
+ *             Upon request the bldc controller will send 4 bytes following this structure:
+ *             [0] = sign character, '+' or '-'
+ *             [1] = bits [6-0] are the most significant bits of the 14 bit unsigned speed data
+ *             [2] = bits [6-0] are the least significant bits of the 14 bit unsigned speed data
+ *
+ * @return     The motor speed.
+ */
 int getMotorSpeed()
 {
+  // bldc controller expects the string ":g\n" as speed data request
   Serial2.print(":");
   Serial2.print("g");
   Serial2.print('\n');
 
-  char received_data[4];
-  int read_length = Serial2.readBytesUntil('\n', received_data, 4);
+  // Array to store read data from the bldc controller
+  char received_data[4]; //TODO: Why 4 bytes?
+
+  // The readBytesUntil function will return the number of bytes read when:
+  // 1. 4 bytes are received
+  // 2. There is a timeout
+  // 3. The specified termination character is received (termination not stored in buffer)
+  size_t read_length = Serial2.readBytesUntil('\n', received_data, 4);
+
+  // Correct data assumes 3 bytes where read
   if(read_length == 3)
   {
     int speed_data = ((received_data[1] & 0x7F) << 7) | (received_data[2] & 0x7F);
@@ -248,7 +295,13 @@ int getMotorSpeed()
   return 0;
 }
 
-uint16_t readAngleRaw16(){
+/**
+ * @brief      Reads an angle raw 16.
+ *
+ * @return     { description_of_the_return_value }
+ */
+uint16_t readAngleRaw16()
+{
 
     digitalWrite(SS, LOW);
     vspi->beginTransaction(s);
@@ -263,6 +316,13 @@ uint16_t readAngleRaw16(){
 }
 
 // gets the encoder agulum in range [-180, 180]
+/**
+ * @brief      Gets the wrapped angle.
+ *
+ * @param[in]  rawAngle  The raw angle
+ *
+ * @return     The wrapped angle.
+ */
 float getWrappedAngle(uint16_t rawAngle)
 {
   float angle = rawAngle*ANGLE_CONVERTION + (180.0 - INITIAL_ANGLE);
@@ -278,6 +338,13 @@ float getWrappedAngle(uint16_t rawAngle)
 }
 
 // gets the angular speed
+/**
+ * @brief      Gets the angular speed.
+ *
+ * @param[in]  angle  The angle
+ *
+ * @return     The angular speed.
+ */
 float getAngularSpeed(float angle)
 {
   // Elapsed time calculation can be left out since timer is precisely sampling every 10ms
