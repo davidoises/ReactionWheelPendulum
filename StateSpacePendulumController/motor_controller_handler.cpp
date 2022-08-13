@@ -19,6 +19,8 @@
 #define MOTOR_CONTROLLER_UART_RXD_PIN 9
 #define MOTOR_CONTROLLER_UART_TXD_PIN 10
 
+#define MOTOR_CONTROLLER_UART_BAUDRATE_bPS (115200)
+
 #define MOTOR_SPEED_BUFFER_LENGTH (4U)
 
 // Conversion factor for motor speed to bits
@@ -38,7 +40,7 @@
 void motor_controller_handler_init()
 {
   // Start second serial for motor controller communications
-  Serial2.begin(115200, SERIAL_8N1, MOTOR_CONTROLLER_UART_RXD_PIN, MOTOR_CONTROLLER_UART_TXD_PIN);
+  Serial2.begin(MOTOR_CONTROLLER_UART_BAUDRATE_bPS, SERIAL_8N1, MOTOR_CONTROLLER_UART_RXD_PIN, MOTOR_CONTROLLER_UART_TXD_PIN);
   
   // Arm motor controller (enable power stage)
   Serial2.print(":");
@@ -51,15 +53,15 @@ void motor_controller_handler_init()
   Serial2.print('\n');
 }
 
-void motor_controller_handler_set_current(float current_command)
+void motor_controller_handler_set_current(const float current_command)
 {
   // Convert the current command into 14 bit usigned data
-  uint16_t current_command_bits = abs(current_command)/CURRENT_RESOLUTION_mA_PER_BIT;
+  const uint16_t current_command_bits = abs(current_command)/CURRENT_RESOLUTION_mA_PER_BIT;
 
   // Split the insgined data into most and leas significant 7-bit sections
   // 8th bit is set to 1 to deal with signal integrity issues
-  uint8_t current_command_MSB = ( (current_command_bits >> 7) & 0x00FF) | 0x80;
-  uint8_t current_command_LSB = (current_command_bits & 0x00FF) | 0x80;
+  const uint8_t current_command_MSB = ( (current_command_bits >> 7) & 0x00FF) | 0x80;
+  const uint8_t current_command_LSB = (current_command_bits & 0x00FF) | 0x80;
 
   // Send the command over UART with the required structure
   Serial2.print(":");
@@ -98,7 +100,7 @@ float motor_controller_handler_get_speed()
   // the readBytesUntil function wont store the new line character. Still the buffer
   // length is set to 4 to catch cases where a bad transmission ocurred and the 4th character was
   // not a new line character.
-  size_t read_length = Serial2.readBytesUntil('\n', received_data, MOTOR_SPEED_BUFFER_LENGTH);
+  const size_t read_length = Serial2.readBytesUntil('\n', received_data, MOTOR_SPEED_BUFFER_LENGTH);
   
   // Correct transmission should always be 3 bytes
   if(read_length == 3)

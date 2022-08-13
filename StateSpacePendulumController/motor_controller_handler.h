@@ -27,7 +27,7 @@ void motor_controller_handler_init();
  *
  * @param[in]  current_command  The current reference for the motor control loop
  */
-void motor_controller_handler_set_current(float current_command);
+void motor_controller_handler_set_current(const float current_command);
 
 /**
 * @brief      Gets the motor speed from the bldc controller by sending

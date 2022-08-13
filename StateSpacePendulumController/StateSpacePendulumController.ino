@@ -14,16 +14,14 @@
 /****************************************************************************************
  *                                       I N C L U D E S
  ****************************************************************************************/
- 
-#include <SPI.h>
+
 #include "motor_controller_handler.h"
+#include "pendulum_sensing.h"
 
 /****************************************************************************************
  *                                        D E F I N E S
  ****************************************************************************************/
-
-#define ANGLE_CONVERTION 360.0f/65536.0f
-#define INITIAL_ANGLE 77.45
+ 
 #define ANGLE_SAMPLING_TIME_US 10000
 //#define ANGLE_SAMPLING_TIME_US 25000
 //#define ANGLE_SAMPLING_TIME_US 5000
@@ -42,9 +40,6 @@ float control_law = 0;
 
 uint8_t swingged_up = 0;
 
-SPISettings s = SPISettings(8000000, MSBFIRST, SPI_MODE0);
-SPIClass* vspi = new SPIClass(VSPI);
-
 // Sampling timer
 hw_timer_t * sampling_timer = NULL;
 volatile uint8_t update_sampling;
@@ -60,10 +55,6 @@ void IRAM_ATTR sampling_isr() {
 /****************************************************************************************
  *                P R I V A T E   F U N C T I O N   D E C L A R A T I O N S                  
  ****************************************************************************************/
-
-uint16_t readAngleRaw16();
-float getWrappedAngle(uint16_t rawAngle);
-float getAngularSpeed(float angle);
 
 /****************************************************************************************
  *                        A R D U I N O   B A S E   F U N C T I O N S                  
@@ -81,9 +72,8 @@ void setup()
   // Print some warning for the user
   Serial.println("Starting program in 4 second");
 
-  // Initialize SPI
-  vspi->begin();
-  pinMode(SS, OUTPUT);
+  // Initialize SPI bus for pendulum angle sensor
+  pendulum_sensing_start_bus();
 
   // Initializes motor controller
   motor_controller_handler_init();
@@ -103,9 +93,8 @@ void loop() {
 
   if (update_sampling)
   {
-    uint16_t rawAngle = readAngleRaw16();
-    float angle = getWrappedAngle(rawAngle);
-    float w = getAngularSpeed(angle);
+    float angle = pendulum_sensing_get_adjusted_angle();
+    float w = pendulum_sensing_get_angular_speed(angle);
     float motor_speed = motor_controller_handler_get_speed();
 
     lpf_angle = 0.7*lpf_angle + 0.3*angle;
@@ -200,81 +189,6 @@ void loop() {
 
 }
 
- /****************************************************************************************
+/****************************************************************************************
  *                               P R I V A T E   F U N C T I O N S                 
  ****************************************************************************************/
-
-/**
- * @brief      Reads an angle raw 16.
- *
- * @return     { description_of_the_return_value }
- */
-uint16_t readAngleRaw16()
-{
-
-    digitalWrite(SS, LOW);
-    vspi->beginTransaction(s);
-
-    //angle = SPI.transfer16(0x0000); //Read 16-bit angle
-    uint16_t angle = vspi->transfer16(0x0000);
-    
-    vspi->endTransaction();
-    digitalWrite(SS, HIGH);
-
-    return angle;
-}
-
-// gets the encoder agulum in range [-180, 180]
-/**
- * @brief      Gets the wrapped angle.
- *
- * @param[in]  rawAngle  The raw angle
- *
- * @return     The wrapped angle.
- */
-float getWrappedAngle(uint16_t rawAngle)
-{
-  float angle = rawAngle*ANGLE_CONVERTION + (180.0 - INITIAL_ANGLE);
-  int divisor = floor(angle / 360.0);
-  angle = angle - divisor*360;
-
-  if(angle > 180)
-  {
-    angle = angle - 360.0;
-  }
-  
-  return angle;
-}
-
-// gets the angular speed
-/**
- * @brief      Gets the angular speed.
- *
- * @param[in]  angle  The angle
- *
- * @return     The angular speed.
- */
-float getAngularSpeed(float angle)
-{
-  // Elapsed time calculation can be left out since timer is precisely sampling every 10ms
-  static uint32_t previousT;
-  uint32_t currentT = micros();
-  float dt = (currentT - previousT);
-  previousT = currentT;
-  
-  float originalAngle = angle;
-  static float previousAngle;
-  if ( abs(angle) > 150 && angle*previousAngle < 0 )
-  {
-    //Serial.println("Jump");
-    angle = 360.0 - abs(angle);
-    if(previousAngle < 0)
-    {
-      angle = angle * -1;
-    }
-  }
-  float angleDiff = angle - previousAngle;
-  previousAngle = originalAngle;
-  
-  return angleDiff*1000000.0/dt;
-}
