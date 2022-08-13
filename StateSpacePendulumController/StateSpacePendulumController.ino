@@ -16,21 +16,11 @@
  ****************************************************************************************/
  
 #include <SPI.h>
+#include "motor_controller_handler.h"
 
 /****************************************************************************************
  *                                        D E F I N E S
  ****************************************************************************************/
-
-// Note on UARTs:
-//     3 UARTs can be mapped to any pin through internal mux.
-//     These UARTs are tied to specific pins by default and using these pins can
-//     provide some optimization (maybe not with arduino Serial library). Default pins:
-//     UART0 RX:3 TX:1
-//     UART1 RX:9 TX:10
-//     UART2 RX16 TX:17
-
-#define RXD1 9
-#define TXD1 10
 
 #define ANGLE_CONVERTION 360.0f/65536.0f
 #define INITIAL_ANGLE 77.45
@@ -71,7 +61,6 @@ void IRAM_ATTR sampling_isr() {
  *                P R I V A T E   F U N C T I O N   D E C L A R A T I O N S                  
  ****************************************************************************************/
 
-int getMotorSpeed();
 uint16_t readAngleRaw16();
 float getWrappedAngle(uint16_t rawAngle);
 float getAngularSpeed(float angle);
@@ -80,30 +69,25 @@ float getAngularSpeed(float angle);
  *                        A R D U I N O   B A S E   F U N C T I O N S                  
  ****************************************************************************************/
 
-void setup() {
-
+void setup()
+{
+  // Start primary serial for user communications  
   Serial.begin(115200);
-  //Serial2.begin(115200);
-  Serial2.begin(115200, SERIAL_8N1, RXD1, TXD1); //Use different UART pins
 
+  // User guard to prevent unintended/immediate oepration when booting
   Serial.println("Press anything to start execution");
-  while(Serial.available() == 0) {
-    }
+  while(Serial.available() == 0) {}
 
+  // Print some warning for the user
   Serial.println("Starting program in 4 second");
 
   // Initialize SPI
   vspi->begin();
   pinMode(SS, OUTPUT);
 
-  // Initialize motor
-  Serial2.print(":");
-  Serial2.print("e");
-  Serial2.print('\n');
-
-  Serial2.print(":");
-  Serial2.print("r");
-  Serial2.print('\n');
+  // Initializes a secondary serial port to send commands to motor controller.
+  // Sends the initial commands to start motor operation.
+  motor_controller_handler_init();
 
   delay(4000);
 
@@ -123,19 +107,19 @@ void loop() {
     uint16_t rawAngle = readAngleRaw16();
     float angle = getWrappedAngle(rawAngle);
     float w = getAngularSpeed(angle);
-    int motor_speed = getMotorSpeed();
+    float motor_speed = motor_controller_handler_get_speed();
 
     lpf_angle = 0.7*lpf_angle + 0.3*angle;
     hlpf_angle = 0.9*hlpf_angle + 0.1*angle;
     lpf_w = 0.7*lpf_w + 0.3*w;
-    lpf_mot = 0.7*lpf_mot + 0.3*( (float) motor_speed );
+    lpf_mot = 0.7*lpf_mot + 0.3*motor_speed;
 
     if(abs(angle) < 27.0)
     {
       
       float kp = 240.0;
       float kd = 40.0;
-      float ks = 0.001;
+      float ks = 0.001f*6.0f; // updated since the scaling used to be wrong
       float kt = 0.0075;
 
       if(abs(angle) < 6.0)
@@ -211,30 +195,7 @@ void loop() {
     /* End control law conditioning*/
 
     /* Start of motor command transmission*/
-    
-    //  range of 5000mA in 14 bits
-    // 1000/(153*2) seems to be a random number I picked to fit the max expected current in mA within 14 bits without wastin space
-    // Seems to actualy target 4200 instead of 5000mA
-    // TODO: fix this to fit the correct data
-    //       The correct factor for abs(5000) should be 1/resolution = (2^14-1)/(5000)
-    //       And the conversion should be bits = mA / resolution
-    uint16_t motor_current = (abs(control_law)*1000)/(153*2);
-    uint8_t MSB = ( (motor_current >> 7) & 0x00FF) | 0x80; // set MSB bit to one always, test on other microncontroller without this hack
-    uint8_t LSB = (motor_current & 0x00FF) | 0x80;
-
-    Serial2.print(":");
-    Serial2.print("c");
-    if(control_law >= 0)
-    {
-      Serial2.print("+");
-    }
-    else
-    {
-      Serial2.print("-");
-    }
-    Serial2.write(MSB);
-    Serial2.write(LSB);
-    Serial2.print('\n');
+    motor_controller_handler_set_current(control_law);
 
     /* Ending of motor command transmission*/
     
@@ -246,54 +207,6 @@ void loop() {
  /****************************************************************************************
  *                               P R I V A T E   F U N C T I O N S                 
  ****************************************************************************************/
-
-/**
- * @brief      Gets the motor speed from the bldc controller by sending
- *             the UART request and then parsing the read bytes.
- *             
- *             Upon request the bldc controller will send 4 bytes following this structure:
- *             [0] = sign character, '+' or '-'
- *             [1] = bits [6-0] are the most significant bits of the 14 bit unsigned speed data
- *             [2] = bits [6-0] are the least significant bits of the 14 bit unsigned speed data
- *
- * @return     The motor speed.
- */
-int getMotorSpeed()
-{
-  // bldc controller expects the string ":g\n" as speed data request
-  Serial2.print(":");
-  Serial2.print("g");
-  Serial2.print('\n');
-
-  // Array to store read data from the bldc controller
-  char received_data[4]; //TODO: Why 4 bytes?
-
-  // The readBytesUntil function will return the number of bytes read when:
-  // 1. 4 bytes are received
-  // 2. There is a timeout
-  // 3. The specified termination character is received (termination not stored in buffer)
-  size_t read_length = Serial2.readBytesUntil('\n', received_data, 4);
-
-  // Correct data assumes 3 bytes where read
-  if(read_length == 3)
-  {
-    int speed_data = ((received_data[1] & 0x7F) << 7) | (received_data[2] & 0x7F);
-    speed_data *= 2;
-    
-    if(received_data[0] == '-')
-    {
-      speed_data *= -1;
-    }
-    return speed_data;
-    //Serial.println(speed_data);
-  }
-  //else
-  //{
-  //  Serial.println(read_length);
-  //}
-
-  return 0;
-}
 
 /**
  * @brief      Reads an angle raw 16.
