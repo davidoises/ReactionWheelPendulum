@@ -24,6 +24,11 @@
  ****************************************************************************************/
  
 #define CONTROL_ISR_PERIOD_US 10000
+#define CONTROL_ISR_FREQUENCY_HZ (1000000.0f/CONTROL_ISR_PERIOD_US)
+
+// 7 HZ Low pass filter constant
+#define SENSING_LPF_CUTOFF_HZ (7.0f)
+#define SENSING_LPF_ALPHA (1.0f / (1.0f + CONTROL_ISR_FREQUENCY_HZ*(1.0f/(2*PI*SENSING_LPF_CUTOFF_HZ))))
 
 /****************************************************************************************
  *                              G L O B A L   V A R I A B L E S
@@ -82,16 +87,16 @@ void setup()
 void loop() {
 
   if (tick_100Hz)
-  {
+  { 
     // TODO: Potentially move the controls code to the ISR callback itself and just leave the prints here
     pendulum_sensing_vars.pendulum_angle = pendulum_sensing_get_adjusted_angle();
     pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, CONTROL_ISR_PERIOD_US/1000000.0f);
     pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
-
-    // TODO: fix LPF so that it actually makes sense
-    pendulum_sensing_vars.pendulum_angle_filtered = 0.7f * pendulum_sensing_vars.pendulum_angle_filtered + 0.3f * pendulum_sensing_vars.pendulum_angle;
-    pendulum_sensing_vars.pendulum_speed_filtered = 0.7f * pendulum_sensing_vars.pendulum_speed_filtered + 0.3f * pendulum_sensing_vars.pendulum_speed;
-    pendulum_sensing_vars.motor_speed_filtered = 0.7f * pendulum_sensing_vars.motor_speed_filtered + 0.3f * pendulum_sensing_vars.motor_speed;
+    
+    // Low pass filter mesurements from sensors
+    pendulum_sensing_vars.pendulum_angle_filtered = (1.0f-SENSING_LPF_ALPHA) * pendulum_sensing_vars.pendulum_angle_filtered + SENSING_LPF_ALPHA * pendulum_sensing_vars.pendulum_angle;
+    pendulum_sensing_vars.pendulum_speed_filtered = (1.0f-SENSING_LPF_ALPHA) * pendulum_sensing_vars.pendulum_speed_filtered + SENSING_LPF_ALPHA * pendulum_sensing_vars.pendulum_speed;
+    pendulum_sensing_vars.motor_speed_filtered = (1.0f-SENSING_LPF_ALPHA) * pendulum_sensing_vars.motor_speed_filtered + SENSING_LPF_ALPHA * pendulum_sensing_vars.motor_speed;
 
     pendulum_controller(&pendulum_sensing_vars, &pendulum_controller_state);
 
