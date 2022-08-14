@@ -15,9 +15,9 @@
  *                                       I N C L U D E S
  ****************************************************************************************/
 
-#include "motor_controller_handler.h"
-#include "pendulum_sensing.h"
-#include "pendulum_controller.h"
+#include "src/drivers/motor_controller_handler.h"
+#include "src/drivers/pendulum_sensing.h"
+#include "src/controls/pendulum_controller.h"
 
 /****************************************************************************************
  *                                        D E F I N E S
