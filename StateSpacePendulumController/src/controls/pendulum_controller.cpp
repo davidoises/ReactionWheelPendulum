@@ -115,6 +115,7 @@ void pendulum_controller(const struct pendulum_sensing_vars_S* sensing_vars, str
 {
 
   // TODO: Use the filtered angle for these threshold checks
+  // TODO: Create macros for thresholds
   // If pendulum is wihin linear region, run control loop
   if(abs(sensing_vars->pendulum_angle) < 27.0)
   {
