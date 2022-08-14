@@ -23,9 +23,7 @@
  *                                        D E F I N E S
  ****************************************************************************************/
  
-#define ANGLE_SAMPLING_TIME_US 10000
-//#define ANGLE_SAMPLING_TIME_US 25000
-//#define ANGLE_SAMPLING_TIME_US 5000
+#define CONTROL_ISR_PERIOD_US 10000
 
 /****************************************************************************************
  *                              G L O B A L   V A R I A B L E S
@@ -36,14 +34,16 @@ struct pendulum_sensing_vars_S pendulum_sensing_vars = {0};
 
 // Control ISR timer
 hw_timer_t * sampling_timer = NULL;
-volatile uint8_t update_sampling;
+
+// Flag to run code at 100Hz in main loop
+volatile uint8_t tick_100Hz;
 
 /****************************************************************************************
  *                               I S R   C A L L B A C K S                      
  ****************************************************************************************/
 
 void IRAM_ATTR sampling_isr() {
-  update_sampling = 1;
+  tick_100Hz = 1;
 }
 
 /****************************************************************************************
@@ -70,22 +70,22 @@ void setup()
 
   delay(4000);
 
-  // Set sampling trigger to ANGLE_SAMPLING_TIME_US microseconds
-  update_sampling = 0;
+  // Set sampling trigger to CONTROL_ISR_PERIOD_US microseconds
+  tick_100Hz = 0;
   sampling_timer = timerBegin(0, 80, true);
   timerAttachInterrupt(sampling_timer, &sampling_isr, true);
-  timerAlarmWrite(sampling_timer, ANGLE_SAMPLING_TIME_US, true);
+  timerAlarmWrite(sampling_timer, CONTROL_ISR_PERIOD_US, true);
   timerAlarmEnable(sampling_timer);
 
 }
 
 void loop() {
 
-  if (update_sampling)
+  if (tick_100Hz)
   {
     // TODO: Potentially move the controls code to the ISR callback itself and just leave the prints here
     pendulum_sensing_vars.pendulum_angle = pendulum_sensing_get_adjusted_angle();
-    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, ANGLE_SAMPLING_TIME_US/1000000.0f);
+    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, CONTROL_ISR_PERIOD_US/1000000.0f);
     pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
 
     // TODO: fix LPF so that it actually makes sense
@@ -104,11 +104,7 @@ void loop() {
     //Serial.print(" ");
     //Serial.println(pendulum_sensing_vars.motor_speed_filtered);
     
-    //Serial.print(sp);
-    //Serial.print(" ");
-    //Serial.println(control_law);
-    
-    update_sampling = 0;
+    tick_100Hz = 0;
   }
 
 }
