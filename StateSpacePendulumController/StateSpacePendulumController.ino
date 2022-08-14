@@ -88,6 +88,7 @@ void loop() {
     pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, 1000000.0f/ANGLE_SAMPLING_TIME_US);
     pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
 
+    // TODO: fix LPF so that it actually makes sense
     pendulum_sensing_vars.pendulum_angle_filtered = 0.7f * pendulum_sensing_vars.pendulum_angle_filtered + 0.3f * pendulum_sensing_vars.pendulum_angle;
     pendulum_sensing_vars.pendulum_speed_filtered = 0.7f * pendulum_sensing_vars.pendulum_speed_filtered + 0.3f * pendulum_sensing_vars.pendulum_speed;
     pendulum_sensing_vars.motor_speed_filtered = 0.7f * pendulum_sensing_vars.motor_speed_filtered + 0.3f * pendulum_sensing_vars.motor_speed;
