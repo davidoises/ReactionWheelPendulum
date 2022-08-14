@@ -72,11 +72,6 @@ float pendulum_sensing_get_adjusted_angle()
   // Adjust the original angle to measure 180 degrees when the pendulum is hanging free
   // Do this by removing its original bias (INITIAL_ANGLE_DEG) and then add 180
   const float absolute_angle = original_angle - INITIAL_ANGLE_DEG + 180.0f ;
-  
-  //int divisor = floor(angle / 360.0f);
-  //angle = angle - divisor*360;
-  //const float wrapped_angle = absolute_angle % 360.0f;
-  // TODO: Delete comments once proved
 
   // Float modulo operation to wrap angle in 360 deg range
   const float wrapped_angle_360 = absolute_angle - (trunc(absolute_angle/360.0f) * 360.0f);
