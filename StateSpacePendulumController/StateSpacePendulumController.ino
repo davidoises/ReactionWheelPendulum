@@ -85,7 +85,7 @@ void loop() {
   {
     // TODO: Potentially move the controls code to the ISR callback itself and just leave the prints here
     pendulum_sensing_vars.pendulum_angle = pendulum_sensing_get_adjusted_angle();
-    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, 1000000.0f/ANGLE_SAMPLING_TIME_US);
+    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, ANGLE_SAMPLING_TIME_US/1000000.0f);
     pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
 
     // TODO: fix LPF so that it actually makes sense
@@ -97,15 +97,14 @@ void loop() {
 
     motor_controller_handler_set_current(pendulum_controller_state.control_law);
 
-    //Serial.print(lpf_angle);
-    //Serial.print(sp);
-    //Serial.print(" ");
     Serial.print("180 -180 ");
     Serial.println(pendulum_sensing_vars.pendulum_angle_filtered);
-    //Serial.print(w);
     //Serial.print(" ");
-    //Serial.println(lpf_w);
-    //Serial.println(motor_speed);
+    //Serial.println(pendulum_sensing_vars.pendulum_speed_filtered);
+    //Serial.print(" ");
+    //Serial.println(pendulum_sensing_vars.motor_speed_filtered);
+    
+    //Serial.print(sp);
     //Serial.print(" ");
     //Serial.println(control_law);
     
