@@ -95,7 +95,7 @@ void loop()
     
     // 1. Gather sensgin variables
     pendulum_sensing_vars.pendulum_angle = pendulum_sensing_get_adjusted_angle();
-    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, CONTROL_ISR_PERIOD_US/1000000.0f);
+    pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, 1.0f/CONTROL_ISR_FREQUENCY_HZ);
     pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
     
     // Low pass filter mesurements from sensors
