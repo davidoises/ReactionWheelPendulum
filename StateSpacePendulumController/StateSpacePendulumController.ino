@@ -85,11 +85,15 @@ void setup()
 
 }
 
-void loop() {
-
+void loop()
+{
+  // Code running at 100Hz
   if (tick_100Hz)
-  { 
-    // Gather sensgin variables
+  {
+    // Controls code was to slow to run directly in the ISR so moved to main loop
+    // The slowliness is due to the UART communication for the motor controller.
+    
+    // 1. Gather sensgin variables
     pendulum_sensing_vars.pendulum_angle = pendulum_sensing_get_adjusted_angle();
     pendulum_sensing_vars.pendulum_speed = pendulum_sensing_get_angular_speed(pendulum_sensing_vars.pendulum_angle, CONTROL_ISR_PERIOD_US/1000000.0f);
     pendulum_sensing_vars.motor_speed = motor_controller_handler_get_speed();
@@ -98,13 +102,14 @@ void loop() {
     pendulum_sensing_vars.pendulum_angle_filtered = (1.0f-SENSING_LPF_ALPHA) * pendulum_sensing_vars.pendulum_angle_filtered + SENSING_LPF_ALPHA * pendulum_sensing_vars.pendulum_angle;
     pendulum_sensing_vars.pendulum_speed_filtered = (1.0f-SENSING_LPF_ALPHA) * pendulum_sensing_vars.pendulum_speed_filtered + SENSING_LPF_ALPHA * pendulum_sensing_vars.pendulum_speed;
     pendulum_sensing_vars.motor_speed_filtered = (1.0f-SENSING_LPF_ALPHA) * pendulum_sensing_vars.motor_speed_filtered + SENSING_LPF_ALPHA * pendulum_sensing_vars.motor_speed;
-
-    // Run the control loops
+    
+    // 2. Run the control loops
     pendulum_controller(&pendulum_sensing_vars, &pendulum_controller_state);
-
-    // Send the actual command to the actuator
+    
+    // 3. Send the actual command to the actuator
     motor_controller_handler_set_current(pendulum_controller_state.control_law);
 
+    // Data for serial plotter
     Serial.print("180 -180 ");
     Serial.println(pendulum_sensing_vars.pendulum_angle_filtered);
     //Serial.print(" ");
@@ -114,5 +119,4 @@ void loop() {
     
     tick_100Hz = 0;
   }
-
 }
