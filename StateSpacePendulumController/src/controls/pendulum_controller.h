@@ -12,7 +12,7 @@
 struct pendulum_controller_state_S
 {
   float control_law;        // Current command coming out of the controller
-  bool  at_operating_point; // Flag indicating whether the pendulum needs to be swung up to the operating region
+  bool  at_operating_point; // Flag indicating whether the reached the operating region. Never cleared to avoid continuous swing ups
   float adjusted_reference; // Reference for the pendulum position, automatically set for optimum control
 };
 
@@ -22,7 +22,8 @@ struct pendulum_sensing_vars_S
   float pendulum_speed;           // Measured/estimated pendulum angular speed in degrees/s
   float motor_speed;              // Measured motor speed in RPM
 
-  float pendulum_angle_filtered;  // Low pass filtered version of angle measurement
+  // Low pass filtered version of the measurements
+  float pendulum_angle_filtered;
   float pendulum_speed_filtered;
   float motor_speed_filtered;
 };
